@@ -18,6 +18,7 @@
 
 package org.apache.hudi.avro;
 
+import org.apache.avro.generic.GenericFixed;
 import org.apache.hudi.avro.model.BooleanWrapper;
 import org.apache.hudi.avro.model.BytesWrapper;
 import org.apache.hudi.avro.model.DateWrapper;
@@ -63,6 +64,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -171,13 +173,13 @@ public class TestHoodieAvroUtils {
       + "{\"name\":\"bytesField\",\"type\":\"bytes\"},"
       + "{\"name\":\"stringField\",\"type\":\"string\"},"
       // Logical types
-      + "{\"name\":\"decimalField\",\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":20,\"scale\":5},"
-      + "{\"name\":\"timeMillisField\",\"type\":\"int\",\"logicalType\":\"time-millis\"},"
-      + "{\"name\":\"timeMicrosField\",\"type\":\"long\",\"logicalType\":\"time-micros\"},"
-      + "{\"name\":\"timestampMillisField\",\"type\":\"long\",\"logicalType\":\"timestamp-millis\"},"
-      + "{\"name\":\"timestampMicrosField\",\"type\":\"long\",\"logicalType\":\"timestamp-micros\"},"
-      + "{\"name\":\"localTimestampMillisField\",\"type\":\"long\",\"logicalType\":\"local-timestamp-millis\"},"
-      + "{\"name\":\"localTimestampMicrosField\",\"type\":\"long\",\"logicalType\":\"local-timestamp-micros\"}"
+      + "{\"name\":\"decimalField\",\"type\":{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":20,\"scale\":5}},"
+      + "{\"name\":\"timeMillisField\",\"type\":{\"type\":\"int\",\"logicalType\":\"time-millis\"}},"
+      + "{\"name\":\"timeMicrosField\",\"type\":{\"type\":\"long\",\"logicalType\":\"time-micros\"}},"
+      + "{\"name\":\"timestampMillisField\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}},"
+      + "{\"name\":\"timestampMicrosField\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"}},"
+      + "{\"name\":\"localTimestampMillisField\",\"type\":{\"type\":\"long\",\"logicalType\":\"local-timestamp-millis\"}},"
+      + "{\"name\":\"localTimestampMicrosField\",\"type\":{\"type\":\"long\",\"logicalType\":\"local-timestamp-micros\"}}"
       + "]}";
 
   private static final Schema SCHEMA_WITH_NESTED_FIELD = new Schema.Parser().parse(SCHEMA_WITH_NESTED_FIELD_STR);
@@ -264,6 +266,28 @@ public class TestHoodieAvroUtils {
     GenericRecord rec1 = HoodieAvroUtils.rewriteRecord(rec, new Schema.Parser().parse(EVOLVED_SCHEMA));
     assertEquals("dummy_val", rec1.get("new_col_not_nullable_default_dummy_val"));
     assertNull(rec1.get("new_col_nullable_wo_default"));
+  }
+
+  @Test
+  public void testValueRewriteWithSchemaEvolution() {
+    String originalSchema = "{\"type\": \"record\",\"name\": \"original\",\"fields\": ["
+            + "{\"name\": \"decimal_bytes_to_fixed\", \"type\": "
+            + "{\"type\": \"bytes\",\"logicalType\": \"decimal\",\"precision\":9,\"scale\": 5}}"
+            + "]}";
+    String evolvedSchema = "{\"type\": \"record\",\"name\": \"evolved\",\"fields\": ["
+            + "{\"name\": \"decimal_bytes_to_fixed\", \"type\": "
+            + "{\"name\": \"decimal_bytes_to_fixed.fixed\",\"type\": \"fixed\",\"size\": 4,\"logicalType\": \"decimal\",\"precision\":9,\"scale\": 5}}"
+            + "]}";
+
+    BigDecimal testDecimal = new BigDecimal("1234.56789");
+
+    GenericRecord rec = new GenericData.Record(new Schema.Parser().parse(originalSchema));
+    rec.put("decimal_bytes_to_fixed", ByteBuffer.wrap(testDecimal.unscaledValue().toByteArray()));
+
+    GenericRecord rec1 = HoodieAvroUtils.rewriteRecord(rec, new Schema.Parser().parse(evolvedSchema));
+    BigDecimal rewrittenDecimalBytesToFixed = new BigDecimal(new BigInteger(((GenericFixed) rec1.get("decimal_bytes_to_fixed")).bytes()), 5);
+
+    assertEquals(testDecimal, rewrittenDecimalBytesToFixed);
   }
 
   @Test

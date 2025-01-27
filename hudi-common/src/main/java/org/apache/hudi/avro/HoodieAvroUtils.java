@@ -1138,6 +1138,11 @@ public class HoodieAvroUtils {
       case FIXED:
         // deal with decimal Type
         if (newSchema.getLogicalType() instanceof LogicalTypes.Decimal) {
+          if (oldSchema.getType() == Schema.Type.BYTES) {
+            BigDecimal bigDecimal = DECIMAL_CONVERSION.fromBytes((ByteBuffer) oldValue, oldSchema, oldSchema.getLogicalType());
+            return DECIMAL_CONVERSION.toFixed(bigDecimal, newSchema, newSchema.getLogicalType());
+          }
+
           // TODO: support more types
           if (oldSchema.getType() == Schema.Type.STRING
               || oldSchema.getType() == Schema.Type.DOUBLE
